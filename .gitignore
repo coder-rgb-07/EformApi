@@ -1,0 +1,65 @@
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+# Allow .env.example template file to be committed
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Token files
+o365_token.txt
+*.token
+
+# Local data files
+locallist.json
+locallist_remote_*.json
+
+# JAR files (if they contain sensitive data)
+# Uncomment if needed:
+# lib/*.jar
+
+# Config files with secrets (backup)
+Config.py.backup
+Config.local.py
+

@@ -81,9 +81,16 @@ class Email:
             json.dump(data_to_save, file, indent=4)
 
     def __getRemoteList(self):
-        # 配置应用信息
-        client_id = "c8057deb-a24e-484b-bf57-58bd5b196eb4"
-        client_secret = "Tmh8Q~wLQbrdrNHa.H3Y7wl_w~YKvmuN4GgdAbyN"
+        # 配置应用信息 - Load from environment variables
+        client_id = os.getenv('O365_CLIENT_ID', '')
+        client_secret = os.getenv('O365_CLIENT_SECRET', '')
+        
+        if not client_id or not client_secret:
+            raise ValueError(
+                "O365_CLIENT_ID and O365_CLIENT_SECRET environment variables are required. "
+                "Please set them in your .env file or environment variables."
+            )
+        
         credentials = (client_id, client_secret)
 
         os.environ["http_proxy"] = ""
@@ -168,9 +175,19 @@ class Email:
 
     def sendEmailToAdviser2(self, to_address, subject, body="None", documentFolder=None):
         try:
+            # Load SMTP credentials from environment variables
+            smtp_email = os.getenv('SMTP_EMAIL', '')
+            smtp_password = os.getenv('SMTP_PASSWORD', '')
+            
+            if not smtp_email or not smtp_password:
+                raise ValueError(
+                    "SMTP_EMAIL and SMTP_PASSWORD environment variables are required. "
+                    "Please set them in your .env file or environment variables."
+                )
+            
             # 创建邮件对象
             mail = MIMEMultipart()
-            mail['From'] = 'life-enquiry@amgwealth.com'
+            mail['From'] = smtp_email
             mail['To'] = to_address
             mail['Subject'] = subject
 
@@ -203,7 +220,7 @@ class Email:
             # 发送邮件
             s = smtplib.SMTP(host='smtp.office365.com', port=587)
             s.starttls()
-            s.login('life-enquiry@amgwealth.com', 'awm21089$')
+            s.login(smtp_email, smtp_password)
             s.send_message(mail)
             del mail
             s.quit()
@@ -215,9 +232,19 @@ class Email:
 
     def sendEmailToAdviser(self, to_address, subject, body="None", documentFolder=None):
         try:
+            # Load SMTP credentials from environment variables
+            smtp_email = os.getenv('SMTP_EMAIL', '')
+            smtp_password = os.getenv('SMTP_PASSWORD', '')
+            
+            if not smtp_email or not smtp_password:
+                raise ValueError(
+                    "SMTP_EMAIL and SMTP_PASSWORD environment variables are required. "
+                    "Please set them in your .env file or environment variables."
+                )
+            
             # 创建邮件对象
             mail = MIMEMultipart('related')
-            mail['From'] = 'life-enquiry@amgwealth.com'
+            mail['From'] = smtp_email
             mail['To'] = to_address
             mail['Subject'] = subject
 
@@ -252,7 +279,7 @@ class Email:
             # 发送邮件
             s = smtplib.SMTP(host='smtp.office365.com', port=587)
             s.starttls()
-            s.login('life-enquiry@amgwealth.com', 'awm21089$')
+            s.login(smtp_email, smtp_password)
             s.send_message(mail)
             del mail
             s.quit()

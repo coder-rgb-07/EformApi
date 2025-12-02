@@ -3,6 +3,7 @@ import pyodbc as Database
 from dataclasses import dataclass, fields
 from data.Entity import *
 from Config import Debug
+import os
 
 
 class Db:
@@ -10,10 +11,36 @@ class Db:
     def __init__(self):
         self.conn = None
         try:
-            serverInfo = self.__DbServerInfo('ODBC Driver 17 for SQL Server', 'amg-crm-dev.database.windows.net,1433',
-                                             'amg-crm-dev', 'amgadmin', 'Amg4726723') if (
-                Debug) else self.__DbServerInfo('ODBC Driver 18 for SQL Server', 'awm-prod-00.database.windows.net',
-                                                'crm', 'app_user', 'pine@pple12')
+            if Debug:
+                # Development database configuration
+                driver = os.getenv('DB_DEV_DRIVER', 'ODBC Driver 17 for SQL Server')
+                server = os.getenv('DB_DEV_SERVER', '')
+                database = os.getenv('DB_DEV_DATABASE', '')
+                username = os.getenv('DB_DEV_USERNAME', '')
+                password = os.getenv('DB_DEV_PASSWORD', '')
+                
+                if not all([server, database, username, password]):
+                    raise ValueError(
+                        "Development database environment variables are required: "
+                        "DB_DEV_SERVER, DB_DEV_DATABASE, DB_DEV_USERNAME, DB_DEV_PASSWORD. "
+                        "Please set them in your .env file or environment variables."
+                    )
+            else:
+                # Production database configuration
+                driver = os.getenv('DB_PROD_DRIVER', 'ODBC Driver 18 for SQL Server')
+                server = os.getenv('DB_PROD_SERVER', '')
+                database = os.getenv('DB_PROD_DATABASE', '')
+                username = os.getenv('DB_PROD_USERNAME', '')
+                password = os.getenv('DB_PROD_PASSWORD', '')
+                
+                if not all([server, database, username, password]):
+                    raise ValueError(
+                        "Production database environment variables are required: "
+                        "DB_PROD_SERVER, DB_PROD_DATABASE, DB_PROD_USERNAME, DB_PROD_PASSWORD. "
+                        "Please set them in your .env file or environment variables."
+                    )
+            
+            serverInfo = self.__DbServerInfo(driver, server, database, username, password)
             DSN = (
                 f'DRIVER={{{serverInfo.dirver}}};'
                 f'SERVER={serverInfo.server};DATABASE={serverInfo.database};'
