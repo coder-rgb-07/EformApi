@@ -112,6 +112,60 @@ class Net:
         # logger.info(f"获取到 agentId: {agent_id}")
         return agent_id
 
+    def getPolicyInfo(self, policy_no):
+        """
+        Get full policy information for a given policy number.
+        
+        Args:
+            policy_no: Policy number to query
+            
+        Returns:
+            Dictionary containing full policy information
+            
+        Raises:
+            Exception: If encryption, API call, or decryption fails
+        """
+        try:
+            logger.info(f"Getting policy info for policy number: {policy_no}")
+            data = {
+                'policyNo': policy_no
+            }
+            
+            # 加密
+            logger.info("Encrypting request payload...")
+            e = self.encrypt.encryptParam(data)
+            logger.info(f"Encryption successful, encrypted payload length: {len(e)}")
+
+            # 请求
+            url = f'{host_server}/sales-api/v1/application/getPolicyInfo'
+            logger.info(f"Making API request to: {url}")
+            result = self.__request(url, e)
+            
+            # 检查响应是否包含encryptPayload
+            if 'encryptPayload' not in result:
+                error_msg = f"API响应中缺少encryptPayload字段。响应内容: {result}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+            
+            # 检查encryptPayload是否为空
+            if not result['encryptPayload'] or len(result['encryptPayload']) == 0:
+                error_msg = f"API响应中的encryptPayload为空。响应内容: {result}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+
+            # 解密
+            logger.info("Decrypting response payload...")
+            d = self.encrypt.decryptParam(result['encryptPayload'])
+            logger.info(f"获取到完整保单信息: {json.dumps(d, indent=2, ensure_ascii=False)}")
+            return d
+            
+        except Exception as e:
+            error_msg = f"获取保单信息失败 (policy_no: {policy_no}): {str(e)}"
+            logger.error(error_msg)
+            import traceback
+            logger.error(traceback.format_exc())
+            raise Exception(error_msg) from e
+
     def getDocumentList(self, policy_no):
         data = {
             'policyNo': policy_no
@@ -188,20 +242,60 @@ class Net:
         # get the def name who invoke __request
         def_name = sys._getframe(1).f_code.co_name
 
-        response = requests.post(url, headers=self.__getHeader(
-            self.token), json=self.__getPayload(encryptPayload))
-        result = response.json()
-        # if result contains error, refresh token
-        if 'error' in result:
-            logger.info(f"#{def_name} fetched error. {result}")
-            self.__refreshToken()
+        try:
             response = requests.post(url, headers=self.__getHeader(
                 self.token), json=self.__getPayload(encryptPayload))
+            
+            # Log response status and headers for debugging
+            logger.info(f"#{def_name} API Response Status: {response.status_code}")
+            logger.debug(f"#{def_name} API Response Headers: {dict(response.headers)}")
+            
+            # Check if response is successful
+            if response.status_code != 200:
+                error_msg = f"#{def_name} API请求失败，HTTP状态码: {response.status_code}"
+                logger.error(error_msg)
+                logger.error(f"Response body: {response.text}")
+                raise Exception(f"{error_msg}\nResponse: {response.text}")
+            
             result = response.json()
-            # if result contains error, return
+            
+            # Log the raw response (without sensitive data)
+            logger.debug(f"#{def_name} API Response (raw): {json.dumps(result, indent=2)}")
+            
+            # if result contains error, refresh token
             if 'error' in result:
-                logger.info(f"#{def_name} fetched error. {result}")
-                raise Exception(result)
-        else:
-            logger.info(f"#{def_name} fetched successfully.")
-        return result
+                logger.warning(f"#{def_name} fetched error. {result}")
+                logger.info("Attempting to refresh token and retry...")
+                self.__refreshToken()
+                response = requests.post(url, headers=self.__getHeader(
+                    self.token), json=self.__getPayload(encryptPayload))
+                
+                if response.status_code != 200:
+                    error_msg = f"#{def_name} Retry failed, HTTP状态码: {response.status_code}"
+                    logger.error(error_msg)
+                    logger.error(f"Response body: {response.text}")
+                    raise Exception(f"{error_msg}\nResponse: {response.text}")
+                
+                result = response.json()
+                # if result contains error after refresh, raise exception
+                if 'error' in result:
+                    error_msg = f"#{def_name} fetched error after token refresh. {result}"
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
+            else:
+                logger.info(f"#{def_name} fetched successfully.")
+            return result
+        except requests.exceptions.RequestException as e:
+            error_msg = f"#{def_name} 网络请求异常: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        except json.JSONDecodeError as e:
+            error_msg = f"#{def_name} JSON解析失败: {str(e)}\nResponse text: {response.text if 'response' in locals() else 'N/A'}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        except Exception as e:
+            error_msg = f"#{def_name} 发生未知错误: {str(e)}"
+            logger.error(error_msg)
+            import traceback
+            logger.error(traceback.format_exc())
+            raise

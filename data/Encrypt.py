@@ -1,13 +1,11 @@
 from enum import Enum
 import os
+import subprocess
+import shutil
 from pathlib import Path
 from common.logger import logger
 from common.File import File
 import json
-import os
-import subprocess
-import subprocess
-from pathlib import Path
 
 
 class Encrypt:
@@ -17,6 +15,60 @@ class Encrypt:
 
     def __init__(self):
         pass
+
+    def _find_java_executable(self):
+        """
+        Find Java executable path.
+        Checks JAVA_HOME, common installation paths, and PATH.
+        
+        Returns:
+            str: Path to java.exe or 'java' if found in PATH
+            
+        Raises:
+            FileNotFoundError: If Java cannot be found
+        """
+        import shutil
+        
+        # 1. Check JAVA_HOME environment variable
+        java_home = os.getenv('JAVA_HOME')
+        if java_home:
+            java_path = os.path.join(java_home, 'bin', 'java.exe')
+            if os.path.exists(java_path):
+                logger.info(f"Found Java at JAVA_HOME: {java_path}")
+                return java_path
+        
+        # 2. Check common Java installation paths on Windows
+        common_paths = [
+            r'C:\Program Files\Java\jdk-25\bin\java.exe',
+            r'C:\Program Files\Java\jdk-21\bin\java.exe',
+            r'C:\Program Files\Java\jdk-17\bin\java.exe',
+            r'C:\Program Files\Java\jdk-11\bin\java.exe',
+            r'C:\Program Files\Java\jdk-8\bin\java.exe',
+            r'C:\Program Files (x86)\Java\jdk-25\bin\java.exe',
+            r'C:\Program Files (x86)\Java\jdk-21\bin\java.exe',
+            r'C:\Program Files (x86)\Java\jdk-17\bin\java.exe',
+        ]
+        
+        for java_path in common_paths:
+            if os.path.exists(java_path):
+                logger.info(f"Found Java at common path: {java_path}")
+                return java_path
+        
+        # 3. Check if 'java' is in PATH
+        java_in_path = shutil.which('java')
+        if java_in_path:
+            logger.info(f"Found Java in PATH: {java_in_path}")
+            return java_in_path
+        
+        # 4. If nothing found, raise error
+        error_msg = (
+            "Java not found. Please either:\n"
+            "1. Set JAVA_HOME environment variable\n"
+            "2. Add Java to your system PATH\n"
+            "3. Install Java from https://www.oracle.com/java/technologies/downloads/"
+        )
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
 
     def encryptParam(self, data):
         """
@@ -42,9 +94,12 @@ class Encrypt:
         with open(fileNameIn, 'w') as f:
             json.dump(data, f)
     
+        # 查找Java可执行文件
+        java_exe = self._find_java_executable()
+        
         # 构建Java命令
         command = [
-            'java',
+            java_exe,
             '-cp', f'{File.getExeProjectRootPath()}/lib/springBootDemo123.jar',
             '-Dloader.main=com.fwd.mis.fna.util.amgencstr',
             'org.springframework.boot.loader.PropertiesLauncher',
@@ -56,21 +111,69 @@ class Encrypt:
         logger.info(f"Current Working Directory: {os.getcwd()}")
         logger.info(f"Full Command: {' '.join(command)}")
     
-        # 执行Java命令
-        result = subprocess.run(
-            command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if result.returncode != 0:
-            logger.error("encryptParam Java 程序执行失败！")
-        else:
-            logger.info("encryptParam Java 程序执行成功！")
-    
+        # 执行Java命令，捕获输出和错误
+        try:
+            result = subprocess.run(
+                command, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=30  # 30秒超时
+            )
+            
+            # 记录Java程序的输出
+            if result.stdout:
+                logger.info(f"Java stdout: {result.stdout}")
+            if result.stderr:
+                logger.warning(f"Java stderr: {result.stderr}")
+            
+            if result.returncode != 0:
+                error_msg = f"encryptParam Java程序执行失败！退出码: {result.returncode}"
+                if result.stderr:
+                    error_msg += f"\n错误信息: {result.stderr}"
+                if result.stdout:
+                    error_msg += f"\n输出信息: {result.stdout}"
+                logger.error(error_msg)
+                raise Exception(error_msg)
+            else:
+                logger.info("encryptParam Java 程序执行成功！")
+        except subprocess.TimeoutExpired as e:
+            error_msg = f"encryptParam Java程序执行超时（30秒）"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        except FileNotFoundError as e:
+            error_msg = f"encryptParam 找不到Java程序。请确保Java已安装并在PATH中。错误: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        except Exception as e:
+            error_msg = f"encryptParam 执行Java程序时发生异常: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        # 检查输出文件是否存在
+        if not os.path.exists(fileNameOut):
+            error_msg = f"加密输出文件不存在: {fileNameOut}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        
         # 读取out文件
         encryptPayload = None
-        with open(fileNameOut, 'r') as f:
-            encryptPayload = f.read()
-        if encryptPayload is None:
-            logger.error("加密失败！")
-            raise Exception("加密失败！")
+        try:
+            with open(fileNameOut, 'r', encoding='utf-8') as f:
+                encryptPayload = f.read().strip()
+        except Exception as e:
+            error_msg = f"读取加密输出文件失败: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        # 检查是否为空
+        if not encryptPayload or len(encryptPayload) == 0:
+            error_msg = f"加密失败！输出文件为空: {fileNameOut}"
+            logger.error(error_msg)
+            logger.error(f"输入文件内容: {open(fileNameIn, 'r', encoding='utf-8').read()}")
+            raise Exception(error_msg)
+        
+        logger.info(f"加密成功，输出长度: {len(encryptPayload)} 字符")
         return encryptPayload
 
     def decryptParam(self, data):
@@ -139,9 +242,12 @@ class Encrypt:
             raise FileNotFoundError(f"输入文件不存在: {output_path}")
         # output_path.parent.mkdir(parents=True, exist_ok=True)  # 自动创建输出目录
     
-        # 4. 构建跨平台命令（处理空格和特殊字符）
+        # 4. 查找Java可执行文件
+        java_exe = self._find_java_executable()
+        
+        # 5. 构建跨平台命令（处理空格和特殊字符）
         command = [
-            'java',
+            java_exe,
             '-jar',
             str(jar_path),  # 强制转换为字符串k
             str(input_path),  # 显式添加引号
